@@ -12,7 +12,7 @@ class DashBoard extends StatefulWidget {
 
 class _DashBoardState extends State<DashBoard> {
   String selection = '';
-  String title = 'Home';
+  String title = 'Home of mac';
 
   Widget decider() {
     switch (selection) {
