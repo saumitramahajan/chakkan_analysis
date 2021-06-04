@@ -13,6 +13,10 @@ class BBSProvider extends ChangeNotifier {
 
   List<BarChartModel> data = [];
 
+  List<DropdownMenuItem> puList = [];
+
+  List<String> puListString = ['Plant'];
+
   int chartIndex = -1;
   int closurePercent;
   int totalObservations;
@@ -33,6 +37,10 @@ class BBSProvider extends ChangeNotifier {
   bool loading = true;
 
   String chartTitle;
+  String selectedPu = 'Plant';
+
+  DateTime startDate = DateTime(2019);
+  DateTime endDate = DateTime.now();
 
   BBSProvider() {
     getData();
@@ -50,6 +58,7 @@ class BBSProvider extends ChangeNotifier {
       print('DocList = ' + docList.toString());
       catProcess();
       figProcess();
+      makeDropDown();
     } else {
       responseMap = {'body': 'Failed to load'};
     }
@@ -59,25 +68,46 @@ class BBSProvider extends ChangeNotifier {
 
   //Process For Categories
   void catProcess() {
+    catList = [];
     for (var observation in docList) {
-      String cat = observation['fields']['category']['stringValue'];
-      String subCat = observation['fields']['subCategory']['stringValue'];
-      int index = catList.indexWhere((element) => element['name'] == cat);
-      if (index == -1) {
-        Map<String, dynamic> map = {'name': cat, 'count': 1, subCat: 1};
-        catList.add(map);
-      } else {
-        catList[index]['count']++;
-
-        if (!catList[index].containsKey(subCat)) {
-          catList[index][subCat] = 1;
+      var start = int.parse(observation['fields']['time']['integerValue']);
+      if (startDate.millisecondsSinceEpoch < start &&
+          endDate.millisecondsSinceEpoch > start) {
+        addPu(observation['fields']['pu']['stringValue']);
+        String cat = observation['fields']['category']['stringValue'];
+        String subCat = observation['fields']['subCategory']['stringValue'];
+        int index = catList.indexWhere((element) => element['name'] == cat);
+        if (index == -1) {
+          Map<String, dynamic> map = {'name': cat, 'count': 1, subCat: 1};
+          catList.add(map);
         } else {
-          catList[index][subCat]++;
+          catList[index]['count']++;
+
+          if (!catList[index].containsKey(subCat)) {
+            catList[index][subCat] = 1;
+          } else {
+            catList[index][subCat]++;
+          }
         }
       }
     }
     makeChartData();
-    print(catList.toString());
+    // print(catList.toString());
+  }
+
+  void addPu(String pu) {
+    if (!puListString.contains(pu)) {
+      puListString.add(pu);
+    }
+  }
+
+  void makeDropDown() {
+    puList = List.generate(
+        puListString.length,
+        (index) => DropdownMenuItem(
+              child: Text(puListString[index]),
+              value: puListString[index],
+            ));
   }
 
   //Refresh Chart Data
@@ -128,46 +158,72 @@ class BBSProvider extends ChangeNotifier {
     moreThan30Days = 0;
     totalObservations = docList.length;
     for (var observation in docList) {
-      if (observation['fields']['status']['stringValue'] == 'Closed') {
-        closed++;
-        DateTime start = DateTime.fromMillisecondsSinceEpoch(
-            int.parse(observation['fields']['time']['integerValue']));
-        DateTime end = DateTime.fromMillisecondsSinceEpoch(
-            int.parse(observation['fields']['closureDate']['integerValue']));
-        final days = end.difference(start).inDays;
-        if (days < 10) {
-          within10Days++;
-        } else if (days > 10 && days < 30) {
-          within30Days++;
+      var start = int.parse(observation['fields']['time']['integerValue']);
+      if (startDate.millisecondsSinceEpoch < start &&
+          endDate.millisecondsSinceEpoch > start) {
+        if (observation['fields']['status']['stringValue'] == 'Closed') {
+          closed++;
+          DateTime start = DateTime.fromMillisecondsSinceEpoch(
+              int.parse(observation['fields']['time']['integerValue']));
+          DateTime end = DateTime.fromMillisecondsSinceEpoch(
+              int.parse(observation['fields']['closureDate']['integerValue']));
+          final days = end.difference(start).inDays;
+          if (days < 10) {
+            within10Days++;
+          } else if (days > 10 && days < 30) {
+            within30Days++;
+          } else {
+            moreThan30Days++;
+          }
         } else {
-          moreThan30Days++;
+          open++;
         }
-      } else {
-        open++;
-      }
-      switch (observation['fields']['observationType']['stringValue']) {
-        case ('Safe act'):
-          safeAct++;
-          break;
+        switch (observation['fields']['observationType']['stringValue']) {
+          case ('Safe act'):
+            safeAct++;
+            break;
 
-        case ('Safe condition'):
-          safeSituation++;
-          break;
+          case ('Safe condition'):
+            safeSituation++;
+            break;
 
-        case ('Unsafe act'):
-          unsafeAct++;
-          break;
+          case ('Unsafe act'):
+            unsafeAct++;
+            break;
 
-        case ('Unsafe condition'):
-          unsafeSituation++;
-          break;
+          case ('Unsafe condition'):
+            unsafeSituation++;
+            break;
 
-        default:
+          default:
+        }
       }
     }
     uaucr = unsafeAct / unsafeSituation;
     ssph = (safeAct + safeSituation) / totalObservations;
     usph = (unsafeAct + unsafeSituation) / totalObservations;
     closurePercent = (closed * 100 ~/ docList.length);
+  }
+
+  void updateSelectedDate({DateTime startDateNew, DateTime endDateNew}) {
+    loading = true;
+    notifyListeners();
+    if (startDateNew != null) {
+      print('dateUpdate');
+      startDate = startDateNew;
+    }
+    if (endDateNew != null) {
+      print('enddateUpdate');
+      endDate = endDateNew;
+    }
+    catProcess();
+    figProcess();
+    loading = false;
+    notifyListeners();
+  }
+
+  void updatePu(String pu) {
+    selectedPu = pu;
+    notifyListeners();
   }
 }
